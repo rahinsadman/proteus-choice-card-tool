@@ -1,6 +1,35 @@
 /**
- * Execution endpoint for show_choice_card tool.
+ * Proteus Choice Card Custom Tool for Optimizely Opal & Mark.
+ * Unified root handler for Vercel Serverless Functions.
  */
+
+const toolDefinition = {
+  name: "show_choice_card",
+  display_name: "Show Choice Card",
+  description: "Renders an inline Proteus action card with interactive choice buttons in chat for guided onboarding and user selections.",
+  endpoint: "/execute",
+  http_method: "POST",
+  parameters: [
+    {
+      name: "prompt",
+      type: "string",
+      description: "Short heading or question displayed on the choice card (e.g. 'Have you finished installing your agents from the Directory?').",
+      required: true
+    },
+    {
+      name: "options",
+      type: "array",
+      description: "List of button choice labels (e.g. ['Done installing', 'Skip for now']).",
+      required: true
+    },
+    {
+      name: "subtitle",
+      type: "string",
+      description: "Optional secondary explanatory text displayed below the prompt.",
+      required: false
+    }
+  ]
+};
 
 function normalizeOptions(options) {
   if (Array.isArray(options)) {
@@ -79,6 +108,7 @@ function buildProteusCard(promptText, optionsList, subtitleText) {
 }
 
 module.exports = (req, res) => {
+  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -87,25 +117,33 @@ module.exports = (req, res) => {
     return res.status(200).end();
   }
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: "Method not allowed" });
+  const url = (req.url || '').toLowerCase();
+
+  // POST /execute -> Run tool & return Proteus UI Document
+  if (req.method === 'POST' || url.includes('/execute')) {
+    const body = req.body || {};
+    const prompt = body.prompt || "Make a selection:";
+    const options = normalizeOptions(body.options);
+    const subtitle = body.subtitle || null;
+
+    const proteusDocument = buildProteusCard(prompt, options, subtitle);
+
+    res.setHeader('Content-Type', 'application/vnd.optimizely.opal.tools+json');
+    return res.status(200).json({
+      message: `Choice card presented with ${options.length} options. Waiting for selection.`,
+      content: {
+        status: "displayed",
+        prompt: prompt,
+        options: options
+      },
+      ui: proteusDocument
+    });
   }
 
-  const body = req.body || {};
-  const prompt = body.prompt || "Make a selection:";
-  const options = normalizeOptions(body.options);
-  const subtitle = body.subtitle || null;
-
-  const proteusDocument = buildProteusCard(prompt, options, subtitle);
-
-  res.setHeader('Content-Type', 'application/vnd.optimizely.opal.tools+json');
+  // GET /discovery or GET / -> Return discovery schema for Opal Registry
+  res.setHeader('Content-Type', 'application/json');
   return res.status(200).json({
-    message: `Choice card presented with ${options.length} options. Waiting for selection.`,
-    content: {
-      status: "displayed",
-      prompt: prompt,
-      options: options
-    },
-    ui: proteusDocument
+    functions: [toolDefinition],
+    tools: [toolDefinition]
   });
 };

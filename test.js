@@ -1,5 +1,5 @@
 const assert = require('assert');
-const handler = require('./api/index.js');
+const handler = require('./index.js');
 
 function mockRes() {
   const res = {
