@@ -33,6 +33,14 @@ const toolDefinition = {
   ]
 };
 
+function getField(obj, fieldName) {
+  if (!obj || typeof obj !== 'object') return undefined;
+  if (obj[fieldName] !== undefined) return obj[fieldName];
+  if (obj.parameters && obj.parameters[fieldName] !== undefined) return obj.parameters[fieldName];
+  if (obj.params && obj.params[fieldName] !== undefined) return obj.params[fieldName];
+  return undefined;
+}
+
 function normalizeOptions(options) {
   if (Array.isArray(options)) {
     return options.map(opt => typeof opt === 'string' ? opt.trim() : String(opt));
@@ -109,6 +117,33 @@ function buildProteusCard(promptText, optionsList, subtitleText) {
   };
 }
 
+function parseBody(req, callback) {
+  // If req.body is already populated by Vercel or Express
+  if (req.body !== undefined && req.body !== null) {
+    if (typeof req.body === 'object') {
+      return callback(req.body);
+    }
+    if (typeof req.body === 'string') {
+      try {
+        return callback(JSON.parse(req.body));
+      } catch (e) {
+        return callback({});
+      }
+    }
+  }
+
+  // If streaming
+  let bodyStr = '';
+  req.on('data', chunk => { bodyStr += chunk.toString(); });
+  req.on('end', () => {
+    let parsed = {};
+    if (bodyStr) {
+      try { parsed = JSON.parse(bodyStr); } catch (e) {}
+    }
+    return callback(parsed);
+  });
+}
+
 function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -122,7 +157,6 @@ function handler(req, res) {
 
   const url = (req.url || '').toLowerCase();
 
-  // Helper to send JSON (supports native http and Express/Vercel helpers)
   const sendJson = (statusCode, data, contentType = 'application/json') => {
     res.statusCode = statusCode;
     res.setHeader('Content-Type', contentType);
@@ -132,35 +166,25 @@ function handler(req, res) {
     return res.end(JSON.stringify(data));
   };
 
-  // Helper for reading body if not pre-parsed
-  const handlePost = (body) => {
-    const prompt = body.prompt || "Make a selection:";
-    const options = normalizeOptions(body.options);
-    const subtitle = body.subtitle || null;
-
-    const proteusDocument = buildProteusCard(prompt, options, subtitle);
-
-    return sendJson(200, {
-      message: `Choice card presented with ${options.length} options. Waiting for selection.`,
-      content: {
-        status: "displayed",
-        prompt: prompt,
-        options: options
-      },
-      ui: proteusDocument
-    }, 'application/vnd.optimizely.opal.tools+json');
-  };
-
+  // POST /execute -> Execute and return Proteus UI Document
   if (req.method === 'POST' || url.includes('/execute')) {
-    if (req.body && typeof req.body === 'object') {
-      return handlePost(req.body);
-    }
-    let bodyStr = '';
-    req.on('data', chunk => { bodyStr += chunk.toString(); });
-    req.on('end', () => {
-      let parsed = {};
-      try { parsed = JSON.parse(bodyStr); } catch (e) {}
-      return handlePost(parsed);
+    parseBody(req, (body) => {
+      const prompt = getField(body, 'prompt') || "Make a selection:";
+      const rawOptions = getField(body, 'options');
+      const options = normalizeOptions(rawOptions);
+      const subtitle = getField(body, 'subtitle') || null;
+
+      const proteusDocument = buildProteusCard(prompt, options, subtitle);
+
+      return sendJson(200, {
+        message: `Choice card presented with ${options.length} options. Waiting for selection.`,
+        content: {
+          status: "displayed",
+          prompt: prompt,
+          options: options
+        },
+        ui: proteusDocument
+      }, 'application/vnd.optimizely.opal.tools+json');
     });
     return;
   }
@@ -175,7 +199,7 @@ function handler(req, res) {
 // 1. Export for Vercel Serverless Function
 module.exports = handler;
 
-// 2. Start HTTP server if run directly or by Vercel's Node.js Server Builder
+// 2. Start HTTP server if run directly or by Vercel Node.js Server Builder
 if (require.main === module || process.env.PORT) {
   const port = process.env.PORT || 3000;
   const server = http.createServer(handler);

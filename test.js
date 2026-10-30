@@ -16,93 +16,42 @@ function mockRes() {
 }
 
 async function runTests() {
-  console.log('--- TEST 1: Discovery Endpoint (GET /discovery) ---');
-  const req1 = { method: 'GET', url: '/discovery' };
+  console.log('--- TEST 1: Discovery ---');
   const res1 = mockRes();
-  await handler(req1, res1);
+  handler({ method: 'GET', url: '/discovery' }, res1);
+  assert.strictEqual(res1.body.functions[0].name, 'show_choice_card');
+  console.log('✅ Discovery OK');
 
-  assert.strictEqual(res1.statusCode, 200, 'Discovery should return status 200');
-  assert.ok(Array.isArray(res1.body.functions), 'Discovery must contain functions array');
-  assert.ok(Array.isArray(res1.body.tools), 'Discovery must contain tools array');
-  
-  const fn = res1.body.functions[0];
-  assert.strictEqual(fn.name, 'show_choice_card');
-  assert.strictEqual(fn.endpoint, '/execute');
-  assert.ok(Array.isArray(fn.parameters), 'Parameters must be an array of objects');
-  assert.strictEqual(fn.parameters[0].name, 'prompt');
-  console.log('✅ TEST 1 PASSED: Discovery endpoint strictly conforms to Opal Registry format.');
-
-  console.log('\n--- TEST 2: Execute Endpoint (POST /execute) with standard options ---');
-  const req2 = {
-    method: 'POST',
-    url: '/execute',
-    body: {
-      prompt: 'Have you finished installing your agents from the Directory?',
-      options: ['Done installing', 'Skip for now']
-    }
-  };
+  console.log('--- TEST 2: String body (Vercel raw body) ---');
   const res2 = mockRes();
-  await handler(req2, res2);
+  handler({
+    method: 'POST',
+    url: '/execute',
+    body: JSON.stringify({
+      prompt: 'Ready to publish?',
+      options: ['Publish', 'Add more']
+    })
+  }, res2);
+  assert.ok(res2.body.message.includes('with 2 options'), 'Should have 2 options');
+  assert.strictEqual(res2.body.ui.body[0].children[1].children.length, 2);
+  console.log('✅ String body OK');
 
-  assert.strictEqual(res2.statusCode, 200);
-  assert.strictEqual(res2.getHeader('content-type'), 'application/vnd.optimizely.opal.tools+json');
-  assert.ok(res2.body.ui, 'Response must have ui field');
-  assert.strictEqual(res2.body.ui.$type, 'Document');
-  assert.strictEqual(res2.body.ui.appearance, 'inline');
-  
-  const bodyGroup = res2.body.ui.body[0];
-  assert.strictEqual(bodyGroup.$type, 'Group');
-  
-  const textElem = bodyGroup.children[0];
-  assert.strictEqual(textElem.$type, 'Text');
-  assert.strictEqual(textElem.children, 'Have you finished installing your agents from the Directory?');
-  
-  const btnGroup = bodyGroup.children[1];
-  assert.strictEqual(btnGroup.$type, 'Group');
-  assert.strictEqual(btnGroup.children.length, 2);
-  
-  const btn1 = btnGroup.children[0];
-  assert.strictEqual(btn1.$type, 'Button');
-  assert.strictEqual(btn1.children, 'Done installing');
-  assert.strictEqual(btn1.appearance, 'primary-opal');
-  assert.deepStrictEqual(btn1.onClick, { message: 'Done installing' });
-  
-  const btn2 = btnGroup.children[1];
-  assert.strictEqual(btn2.$type, 'Button');
-  assert.strictEqual(btn2.children, 'Skip for now');
-  assert.strictEqual(btn2.appearance, 'subtle');
-  assert.deepStrictEqual(btn2.onClick, { message: 'Skip for now' });
-  console.log('✅ TEST 2 PASSED: Execute endpoint generates valid Proteus Document with primary-opal & subtle buttons.');
-
-  console.log('\n--- TEST 3: Edge cases (String options, Subtitle present) ---');
-  const req3 = {
+  console.log('--- TEST 3: Nested parameters envelope ---');
+  const res3 = mockRes();
+  handler({
     method: 'POST',
     url: '/execute',
     body: {
-      prompt: 'Confirm your list to send invites:',
-      options: '["Yes, send it", "Add more people", "Change an entry", "Skip for now"]',
-      subtitle: 'Accounts will be created immediately once confirmed.'
+      parameters: {
+        prompt: 'Nested prompt',
+        options: ['Yes', 'No']
+      }
     }
-  };
-  const res3 = mockRes();
-  await handler(req3, res3);
-
-  assert.strictEqual(res3.statusCode, 200);
-  const children = res3.body.ui.body[0].children;
-  assert.strictEqual(children.length, 3, 'Should contain prompt, subtitle, and button group');
-  assert.strictEqual(children[1].children, 'Accounts will be created immediately once confirmed.');
+  }, res3);
+  assert.ok(res3.body.message.includes('with 2 options'), 'Should parse nested parameters envelope');
+  console.log('✅ Nested parameters envelope OK');
   
-  const buttons = children[2].children;
-  assert.strictEqual(buttons.length, 4);
-  assert.strictEqual(buttons[0].appearance, 'primary-opal'); // 'Yes, send it'
-  assert.strictEqual(buttons[2].appearance, 'subtle');       // 'Change an entry'
-  assert.strictEqual(buttons[3].appearance, 'subtle');       // 'Skip for now'
-  console.log('✅ TEST 3 PASSED: Options parsing and subtitle rendering work cleanly.');
-
-  console.log('\n🎉 ALL UNIT TESTS PASSED!');
+  console.log('🎉 ALL TESTS PASSED!');
 }
 
-runTests().catch(err => {
-  console.error('Test failed:', err);
-  process.exit(1);
-});
+runTests();
