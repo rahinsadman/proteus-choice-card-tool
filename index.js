@@ -61,10 +61,11 @@ function normalizeOptions(options) {
 function buildProteusCard(promptText, optionsList, subtitleText) {
   const bodyComponents = [];
 
+  // Heading text (Proteus schema requires numeric fontWeight e.g. "600", not "bold")
   bodyComponents.push({
     $type: "Text",
     fontSize: "md",
-    fontWeight: "bold",
+    fontWeight: "600",
     color: "fg.default",
     children: promptText || "Choose an option:"
   });
@@ -118,7 +119,6 @@ function buildProteusCard(promptText, optionsList, subtitleText) {
 }
 
 function parseBody(req, callback) {
-  // If req.body is already populated by Vercel or Express
   if (req.body !== undefined && req.body !== null) {
     if (typeof req.body === 'object') {
       return callback(req.body);
@@ -132,7 +132,6 @@ function parseBody(req, callback) {
     }
   }
 
-  // If streaming
   let bodyStr = '';
   req.on('data', chunk => { bodyStr += chunk.toString(); });
   req.on('end', () => {
@@ -157,7 +156,7 @@ function handler(req, res) {
 
   const url = (req.url || '').toLowerCase();
 
-  const sendJson = (statusCode, data, contentType = 'application/json') => {
+  const sendJson = (statusCode, data, contentType) => {
     res.statusCode = statusCode;
     res.setHeader('Content-Type', contentType);
     if (typeof res.json === 'function') {
@@ -177,7 +176,7 @@ function handler(req, res) {
       const proteusDocument = buildProteusCard(prompt, options, subtitle);
 
       return sendJson(200, {
-        message: `Choice card presented with ${options.length} options. Waiting for selection.`,
+        message: `The choice card has been presented to the user with ${options.length} options. Prompt the user in one short sentence to make their selection.`,
         content: {
           status: "displayed",
           prompt: prompt,
@@ -189,11 +188,11 @@ function handler(req, res) {
     return;
   }
 
-  // GET /discovery or default
+  // GET /discovery -> Returns discovery schema with v2 discovery MIME type
   return sendJson(200, {
     functions: [toolDefinition],
     tools: [toolDefinition]
-  });
+  }, 'application/vnd.optimizely.opal.tools.discovery+json');
 }
 
 // 1. Export for Vercel Serverless Function
