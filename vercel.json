@@ -1,8 +1,7 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/discovery", "destination": "/api/index" },
-    { "source": "/execute", "destination": "/api/index" },
-    { "source": "/(.*)", "destination": "/api/index" }
+    { "source": "/discovery", "destination": "/api/discovery" },
+    { "source": "/execute", "destination": "/api/execute" }
   ]
 }

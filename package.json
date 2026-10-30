@@ -2,12 +2,9 @@
   "name": "proteus-choice-card-tool",
   "version": "1.0.0",
   "description": "Proteus UI Choice Card custom tool for Optimizely Opal & Mark",
-  "main": "api/index.js",
   "scripts": {
     "start": "node server.js",
     "test": "node test.js"
   },
-  "dependencies": {
-    "express": "^4.19.2"
-  }
+  "dependencies": {}
 }
