@@ -1,7 +1,7 @@
 {
-  "name": "choice-card-content-binding",
+  "name": "choice-card-toplevel-binding",
   "version": "1.0.0",
-  "description": "Proteus UI Choice Card with ui_resource and content envelope data binding",
+  "description": "Proteus UI Choice Card with ui_resource and top-level data binding",
   "main": "index.js",
   "scripts": {
     "test": "node test.js"

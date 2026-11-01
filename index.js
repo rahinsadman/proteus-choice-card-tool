@@ -1,8 +1,8 @@
 /**
- * Proteus Choice Card Tool - Content Binding Variant
+ * Proteus Choice Card Tool - Top-Level Binding Variant
  * - Advertises "ui_resource": "ui://choice-card/template" in /discovery
  * - Serves MCP Resource at POST /resources/read with mimeType "application/vnd.opal.proteus+json"
- * - Returns execution result wrapped in ComposableToolResponse envelope with "content"
+ * - Returns execution result with prompt, options, subtitle at the root dictionary level
  */
 
 const http = require('http');
@@ -183,18 +183,14 @@ function handler(req, res) {
       const options = normalizeOptions(rawOptions);
       const subtitle = getField(body, 'subtitle') || null;
 
-      const cardData = {
-        prompt,
-        options,
-        subtitle
-      };
-
-      // PATH A: ComposableToolResponse where data is in "content"
+      // PATH B: Raw top-level dictionary payload
+      // Returns prompt, options, subtitle directly at top level for /path bindings
       return sendJson(200, {
         message: `The choice card has been presented to the user with ${options.length} options. Prompt the user in one short sentence to make their selection.`,
-        content: cardData,
-        content_type: "application/json"
-      }, 'application/vnd.optimizely.opal.tools+json');
+        prompt: prompt,
+        options: options,
+        subtitle: subtitle
+      }, 'application/json');
     });
     return;
   }
@@ -212,6 +208,6 @@ if (require.main === module || process.env.PORT) {
   const port = process.env.PORT || 3000;
   const server = http.createServer(handler);
   server.listen(port, () => {
-    console.log(`Choice card tool (content binding) running on port ${port}`);
+    console.log(`Choice card tool (top-level binding) running on port ${port}`);
   });
 }
