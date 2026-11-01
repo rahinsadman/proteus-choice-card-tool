@@ -1,69 +1,18 @@
-# Proteus Choice Card Custom Tool for Optimizely Opal & Mark
+# Proteus Choice Card Tool (v3 - Universal ui_resource & Dual Binding)
 
-A lightweight, serverless custom tool that renders native **Proteus UI interactive action cards** inside Optimizely Mark chat threads.
+Production-ready Proteus action card custom tool for Optimizely Opal & Mark.
 
-This tool replaces `ask_user_question`, preventing question cards from being hoisted to the top of the message bubble or suppressing streaming text.
+## What's New in This Version
 
----
-
-## Features
-
-- **Native Proteus UI Document**: Returns `ui: { $type: "Document", appearance: "inline", ... }`.
-- **Interactive Buttons**: Clicking a choice automatically triggers `{ onClick: { message: "<choice>" } }`, sending the selection into Mark chat as the user's turn.
-- **Brand Colors**: Primary action choices use `primary-opal` (Optimizely Lime `#BEFD66` fill / dark text), while secondary actions (Skip, Later, Change) use `subtle`.
-- **Dual Compatibility**: Runs on **Vercel** as a serverless function or as a standalone **Node.js** HTTP server (e.g. for local testing, Docker, or Cloudflare/AWS).
-- **Opal Registry Compliant**: Implements the dual `"functions"` / `"tools"` discovery envelope to pass Opal tool registry validation without schema parsing errors.
-
----
-
-## Endpoints
-
-- `GET /discovery` — Tool manifest for Opal registry.
-- `POST /execute` — Execution handler receiving `{ prompt, options, subtitle }` and returning the Proteus Document.
-
----
-
-## Tool Parameter Schema
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `prompt` | string | Yes | The question or heading displayed on the card (e.g., `"Have you finished installing your agents from the Directory?"`). |
-| `options` | array (strings) | Yes | List of clickable buttons (e.g., `["Done installing", "Skip for now"]`). |
-| `subtitle` | string | No | Optional secondary explanatory text. |
-
----
-
-## Local Testing
-
-1. Run unit tests:
-   ```bash
-   node test.js
-   ```
-2. Run local server:
-   ```bash
-   node server.js
-   ```
-3. Test Discovery via curl:
-   ```bash
-   curl http://localhost:3000/discovery
-   ```
-4. Test Execution via curl:
-   ```bash
-   curl -X POST http://localhost:3000/execute \
-     -H "Content-Type: application/json" \
-     -d '{
-       "prompt": "Which area would you like to add?",
-       "options": ["Key metrics", "Conversion funnel", "Upload a document", "Done / Finalize"]
-     }'
-   ```
-
----
-
-## Deploy to Vercel
-
-1. Create a new GitHub repository and push this directory's files.
-2. In [Vercel](https://vercel.com/new), import the repository and deploy.
-3. In Optimizely Mark, go to **Connectors > Registries > Add tool registry**:
-   - **Name**: `Proteus Choice Cards`
-   - **Discovery URL**: `https://<your-vercel-app>.vercel.app/discovery`
-4. Enable `show_choice_card` in your Mark agent (e.g. `mark_onboarding`).
+1. **Explicit MCP `ui_resource`**:
+   - Advertises `ui_resource: "ui://choice-card/template"` in `/discovery`.
+   - Uses `application/vnd.optimizely.opal.tools.discovery+json`.
+2. **Dedicated Resource Reader (`POST /resources/read`)**:
+   - Exposes the Proteus Document specification via Model Context Protocol (`application/vnd.opal.proteus+json`).
+   - Dynamically resolves `{ uri: "ui://choice-card/template" }` regardless of whether Vercel rewrites the request path or dispatches directly.
+3. **Dual Data Binding**:
+   - `POST /execute` returns `prompt`, `subtitle`, and `options` at **both** the top-level dictionary and inside the `content` envelope.
+   - Guaranteed to bind whether the host client resolves expressions against the root or `content`.
+4. **Button Actions**:
+   - Options are mapped to interactive Axiom buttons with `{ onClick: { message: "<value>" } }`.
+   - Clicking an option immediately dispatches that option as a chat message on the user's behalf.

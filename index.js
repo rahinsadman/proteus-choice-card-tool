@@ -1,126 +1,12 @@
 /**
- * Proteus Choice Card Tool - Top-Level Binding Variant
- * - Advertises "ui_resource": "ui://choice-card/template" in /discovery
- * - Serves MCP Resource at POST /resources/read with mimeType "application/vnd.opal.proteus+json"
- * - Returns execution result with prompt, options, subtitle at the root dictionary level
+ * Proteus Choice Card Custom Tool - Universal Entrypoint
+ * Handles direct serverless invocations and standalone Node servers.
  */
 
 const http = require('http');
-
-const RESOURCE_URI = "ui://choice-card/template";
-
-const toolDefinition = {
-  name: "show_choice_card",
-  display_name: "Show Choice Card",
-  description: "Renders an inline Proteus action card with interactive choice buttons in chat for guided onboarding and user selections.",
-  endpoint: "/execute",
-  http_method: "POST",
-  ui_resource: RESOURCE_URI,
-  parameters: [
-    {
-      name: "prompt",
-      type: "string",
-      description: "Short heading or question displayed on the choice card (e.g. 'Have you finished installing your agents from the Directory?').",
-      required: true
-    },
-    {
-      name: "options",
-      type: "array",
-      description: "List of button choice labels (e.g. ['Done installing', 'Skip for now']).",
-      required: true
-    },
-    {
-      name: "subtitle",
-      type: "string",
-      description: "Optional secondary explanatory text displayed below the prompt.",
-      required: false
-    }
-  ]
-};
-
-// Proteus Document Template with dynamic Value and Map expressions
-const templateDocument = {
-  $type: "Document",
-  appName: "Mark Onboarding",
-  title: { $type: "Value", path: "/prompt" },
-  appearance: "inline",
-  body: [
-    {
-      $type: "Group",
-      flexDirection: "column",
-      gap: "10",
-      p: "4",
-      children: [
-        {
-          $type: "Text",
-          fontSize: "md",
-          fontWeight: "600",
-          color: "fg.default",
-          children: { $type: "Value", path: "/prompt" }
-        },
-        {
-          $type: "Show",
-          when: { "!!": { $type: "Value", path: "/subtitle" } },
-          children: {
-            $type: "Text",
-            fontSize: "sm",
-            color: "fg.secondary",
-            children: { $type: "Value", path: "/subtitle" }
-          }
-        },
-        {
-          $type: "Group",
-          flexDirection: "row",
-          gap: "8",
-          flexWrap: "wrap",
-          children: {
-            $type: "Map",
-            path: "/options",
-            children: {
-              $type: "Button",
-              appearance: { $type: "Value", path: "appearance" },
-              children: { $type: "Value", path: "label" },
-              onClick: {
-                message: { $type: "Value", path: "value" }
-              }
-            }
-          }
-        }
-      ]
-    }
-  ]
-};
-
-function getField(obj, fieldName) {
-  if (!obj || typeof obj !== 'object') return undefined;
-  if (obj[fieldName] !== undefined) return obj[fieldName];
-  if (obj.parameters && obj.parameters[fieldName] !== undefined) return obj.parameters[fieldName];
-  if (obj.params && obj.params[fieldName] !== undefined) return obj.params[fieldName];
-  return undefined;
-}
-
-function normalizeOptions(options) {
-  let list = [];
-  if (Array.isArray(options)) {
-    list = options;
-  } else if (typeof options === 'string') {
-    try {
-      const parsed = JSON.parse(options);
-      if (Array.isArray(parsed)) list = parsed;
-      else list = options.split(',').map(s => s.trim()).filter(Boolean);
-    } catch (e) {
-      list = options.split(',').map(s => s.trim()).filter(Boolean);
-    }
-  }
-
-  return list.map(opt => {
-    const label = typeof opt === 'string' ? opt.trim() : (opt.label || String(opt));
-    const value = typeof opt === 'object' && opt.value ? opt.value : label;
-    const isSecondary = /skip|later|change|fix/i.test(label);
-    const appearance = isSecondary ? "subtle" : "primary-opal";
-    return { label, value, appearance };
-  });
-}
+const discoveryHandler = require('./api/discovery.js');
+const resourcesHandler = require('./api/resources.js');
+const executeHandler = require('./api/execute.js');
 
 function parseBody(req, callback) {
   if (req.body !== undefined && req.body !== null) {
@@ -142,6 +28,7 @@ function parseBody(req, callback) {
 }
 
 function handler(req, res) {
+  // CORS preflight
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -152,62 +39,56 @@ function handler(req, res) {
   }
 
   const url = (req.url || '').toLowerCase();
+  const matchedPath = (req.headers['x-matched-path'] || req.headers['x-forwarded-uri'] || '').toLowerCase();
 
-  const sendJson = (statusCode, data, contentType = 'application/json') => {
-    res.statusCode = statusCode;
-    res.setHeader('Content-Type', contentType);
-    if (typeof res.json === 'function') {
-      return res.json(data);
-    }
-    return res.end(JSON.stringify(data));
-  };
-
-  // 1. MCP Resource Reader endpoint: POST /resources/read
-  if (url.includes('/resources/read')) {
-    parseBody(req, (body) => {
-      const uri = body.uri || RESOURCE_URI;
-      return sendJson(200, {
-        uri: uri,
-        mimeType: "application/vnd.opal.proteus+json",
-        text: JSON.stringify(templateDocument)
-      });
-    });
-    return;
+  // Helper method injection for native http.Server
+  if (!res.json) {
+    res.json = (data) => {
+      res.end(JSON.stringify(data));
+    };
+  }
+  if (!res.status) {
+    res.status = (code) => {
+      res.statusCode = code;
+      return res;
+    };
   }
 
-  // 2. Tool Execution endpoint: POST /execute
-  if (req.method === 'POST' || url.includes('/execute')) {
-    parseBody(req, (body) => {
-      const prompt = getField(body, 'prompt') || "Make a selection:";
-      const rawOptions = getField(body, 'options');
-      const options = normalizeOptions(rawOptions);
-      const subtitle = getField(body, 'subtitle') || null;
-
-      // PATH B: Raw top-level dictionary payload
-      // Returns prompt, options, subtitle directly at top level for /path bindings
-      return sendJson(200, {
-        message: `The choice card has been presented to the user with ${options.length} options. Prompt the user in one short sentence to make their selection.`,
-        prompt: prompt,
-        options: options,
-        subtitle: subtitle
-      }, 'application/json');
-    });
-    return;
+  // DISPATCH LOGIC
+  // 1. Check if this is a resource read (via URL OR via body.uri in POST)
+  if (url.includes('resources') || matchedPath.includes('resources')) {
+    return resourcesHandler(req, res);
   }
 
-  // 3. Discovery endpoint: GET /discovery
-  return sendJson(200, {
-    functions: [toolDefinition],
-    tools: [toolDefinition]
-  }, 'application/vnd.optimizely.opal.tools.discovery+json');
+  // 2. Check if this is discovery
+  if (url.includes('discovery') || matchedPath.includes('discovery')) {
+    return discoveryHandler(req, res);
+  }
+
+  // 3. For any other POST request: inspect body to see if it's a resource read or tool execute
+  if (req.method === 'POST') {
+    return parseBody(req, (body) => {
+      req.body = body;
+      // If the body contains "uri", it is definitely a resource request (TMS calling /resources/read)
+      if (body && body.uri) {
+        return resourcesHandler(req, res);
+      }
+      // Otherwise, it is an execute request
+      return executeHandler(req, res);
+    });
+  }
+
+  // Default GET fallback -> discovery
+  return discoveryHandler(req, res);
 }
 
 module.exports = handler;
 
+// Self-host if run directly or as a Node server
 if (require.main === module || process.env.PORT) {
   const port = process.env.PORT || 3000;
   const server = http.createServer(handler);
   server.listen(port, () => {
-    console.log(`Choice card tool (top-level binding) running on port ${port}`);
+    console.log(`Proteus choice card tool running on port ${port}`);
   });
 }

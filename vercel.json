@@ -1,6 +1,10 @@
 {
   "version": 2,
   "rewrites": [
+    { "source": "/discovery", "destination": "/api/discovery" },
+    { "source": "/resources/read", "destination": "/api/resources" },
+    { "source": "/resources", "destination": "/api/resources" },
+    { "source": "/execute", "destination": "/api/execute" },
     { "source": "/(.*)", "destination": "/index.js" }
   ]
 }
