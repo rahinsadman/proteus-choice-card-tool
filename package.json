@@ -1,7 +1,7 @@
 {
-  "name": "proteus-choice-card-tool",
+  "name": "choice-card-content-binding",
   "version": "1.0.0",
-  "description": "Proteus UI Choice Card custom tool for Optimizely Opal & Mark",
+  "description": "Proteus UI Choice Card with ui_resource and content envelope data binding",
   "main": "index.js",
   "scripts": {
     "test": "node test.js"

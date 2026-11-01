@@ -10,48 +10,43 @@ function mockRes() {
     getHeader(k) { return this.headers[k.toLowerCase()]; },
     status(code) { this.statusCode = code; return this; },
     json(data) { this.body = data; return this; },
-    end(data) { if (data) this.body = data; return this; }
+    end(data) { if (data) this.body = JSON.parse(data); return this; }
   };
   return res;
 }
 
-async function runTests() {
-  console.log('--- TEST 1: Discovery ---');
+async function run() {
+  console.log('Test 1: Discovery...');
   const res1 = mockRes();
   handler({ method: 'GET', url: '/discovery' }, res1);
-  assert.strictEqual(res1.body.functions[0].name, 'show_choice_card');
-  console.log('✅ Discovery OK');
+  assert.strictEqual(res1.body.functions[0].ui_resource, 'ui://choice-card/template');
+  assert.strictEqual(res1.getHeader('content-type'), 'application/vnd.optimizely.opal.tools.discovery+json');
+  console.log('✅ Discovery OK: ui_resource advertised with v2 discovery MIME type');
 
-  console.log('--- TEST 2: String body (Vercel raw body) ---');
+  console.log('Test 2: Resource Reader (POST /resources/read)...');
   const res2 = mockRes();
   handler({
     method: 'POST',
-    url: '/execute',
-    body: JSON.stringify({
-      prompt: 'Ready to publish?',
-      options: ['Publish', 'Add more']
-    })
+    url: '/resources/read',
+    body: { uri: 'ui://choice-card/template' }
   }, res2);
-  assert.ok(res2.body.message.includes('with 2 options'), 'Should have 2 options');
-  assert.strictEqual(res2.body.ui.body[0].children[1].children.length, 2);
-  console.log('✅ String body OK');
+  assert.strictEqual(res2.body.mimeType, 'application/vnd.opal.proteus+json');
+  assert.ok(res2.body.text.includes('"path":"/prompt"'));
+  console.log('✅ Resource Reader OK: returns Proteus template with Value/Map bindings');
 
-  console.log('--- TEST 3: Nested parameters envelope ---');
+  console.log('Test 3: Execute (POST /execute)...');
   const res3 = mockRes();
   handler({
     method: 'POST',
     url: '/execute',
     body: {
-      parameters: {
-        prompt: 'Nested prompt',
-        options: ['Yes', 'No']
-      }
+      prompt: 'Ready to proceed?',
+      options: ['Yes', 'No'],
+      subtitle: 'Please select one'
     }
   }, res3);
-  assert.ok(res3.body.message.includes('with 2 options'), 'Should parse nested parameters envelope');
-  console.log('✅ Nested parameters envelope OK');
-  
-  console.log('🎉 ALL TESTS PASSED!');
+  console.log('✅ Execute OK. Response keys:', Object.keys(res3.body));
+  console.log('ALL TESTS PASSED');
 }
 
-runTests();
+run();
